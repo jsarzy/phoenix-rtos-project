@@ -6,7 +6,7 @@
 	url = https://github.com/phoenix-rtos/libphoenix
 [submodule "phoenix-rtos-build"]
 	path = phoenix-rtos-build
-	url = https://github.com/phoenix-rtos/phoenix-rtos-build
+	url = https://github.com/jsarzy/phoenix-rtos-build
 [submodule "phoenix-rtos-ports"]
 	path = phoenix-rtos-ports
 	url = https://github.com/phoenix-rtos/phoenix-rtos-ports
@@ -27,7 +27,7 @@
 	url = https://github.com/phoenix-rtos/phoenix-rtos-posixsrv
 [submodule "phoenix-rtos-tests"]
 	path = phoenix-rtos-tests
-	url = https://github.com/phoenix-rtos/phoenix-rtos-tests
+	url = https://github.com/jsarzy/phoenix-rtos-tests
 [submodule "phoenix-rtos-corelibs"]
 	path = phoenix-rtos-corelibs
 	url = https://github.com/phoenix-rtos/phoenix-rtos-corelibs/
