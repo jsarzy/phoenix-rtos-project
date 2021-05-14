@@ -3,16 +3,10 @@ name: ci
 
 # on events
 on:
+  workflow_dispatch:
   push:
     branches:
-      - master
-      - posix_rev
-      - 'feature/*'
-  pull_request:
-    branches:
-      - master
-      - posix_rev
-      - 'feature/*'
+      - runner-poc
 
 # jobs
 jobs:
@@ -21,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: ['armv7a7-imx6ull', 'armv7a9-zynq7000', 'armv7m7-imxrt106x', 'armv7m4-stm32l4x6', 'host-pc', 'ia32-generic', 'riscv64-spike', 'riscv64-virt']
+        target: ['armv7m7-imxrt106x']
         include:
           - target: 'ia32-generic'
             syspage: 'psh pc-ata uart16550'
@@ -55,13 +49,42 @@ jobs:
           name: phoenix-rtos-${{ matrix.target }}
           path: _boot
 
-  test:
+          #test:
+          #  needs: build
+          #  name: run tests
+          #  runs-on: ubuntu-latest
+          #  strategy:
+          #    matrix:
+          #      target: ['host-pc', 'ia32-generic']
+
+          #  steps:
+          #    - name: Checkout the repository
+          #      uses: actions/checkout@v2
+          #      with:
+          #        submodules: true
+
+          #    - name: Download build artifacts
+          #      uses: actions/download-artifact@v2
+          #      with:
+          #        name: phoenix-rtos-${{ matrix.target }}
+          #        path: _boot
+
+          #    - name: Fix file permissions
+          #      if: ${{ matrix.target == 'host-pc' }}
+          #      run: find _boot/host-pc/ -type f -exec chmod 755 {} \;
+
+          #    - name: Test runner
+          #      uses: ./.github/actions/phoenix-runner
+          #      with:
+          #        target: ${{ matrix.target }}
+
+  test-hw:
     needs: build
-    name: run tests
-    runs-on: ubuntu-latest
+    name: Run tests on hardware
+    runs-on: [self-hosted]
     strategy:
       matrix:
-        target: ['host-pc', 'ia32-generic']
+        target: ['armv7m7-imxrt106x']
 
     steps:
       - name: Checkout the repository
@@ -75,11 +98,7 @@ jobs:
           name: phoenix-rtos-${{ matrix.target }}
           path: _boot
 
-      - name: Fix file permissions
-        if: ${{ matrix.target == 'host-pc' }}
-        run: find _boot/host-pc/ -type f -exec chmod 755 {} \;
-
       - name: Test runner
-        uses: ./.github/actions/phoenix-runner
-        with:
-          target: ${{ matrix.target }}
+        run: |
+          python3 ./phoenix-rtos-tests/runner.py -T${{ matrix.target }}
+
