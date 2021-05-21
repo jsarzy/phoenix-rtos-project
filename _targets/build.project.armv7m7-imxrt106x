@@ -7,7 +7,13 @@
 #
 [ "${BASH_SOURCE[0]}" -ef "$0" ] && echo "You should source this script, not execute it!" && exit 1
 
+# TODO: remove CFLAGS and LDFLAGS and use ones from phoenix-rtos-build/Makefile.armv7m
 CROSS=arm-phoenix-
+CFLAGS="-Os -Wall -Wstrict-prototypes -g -mcpu=cortex-m7 -mtune=cortex-m7 -mfloat-abi=hard -mthumb\
+	-fomit-frame-pointer -mno-unaligned-access -fdata-sections -ffunction-sections -fno-builtin"
+
+
+LDFLAGS="-z max-page-size=0x1000"
 
 export BUSYBOX_CONFIG=$(realpath "busybox_config")
 export DROPBEAR_CUSTOM_CFLAGS="-DLTC_NO_BSWAP"
@@ -40,37 +46,87 @@ KERNEL_OFFS=$((0x11000))
 # Project specific build
 #
 
-PROGS=("dummyfs" "imxrt-multi" "psh" "imxrt-flash")
+PROGS=()
+BOOT_DEVICE="flash1"
+NAME_USER_SCRIPT="user.plo"
+OFFS_USER_SCRIPT=$((0x10a00))
+MAGIC_USER_SCRIPT="5a5aa5a5"
+
+# Obligatory applications to run Phoenix-RTOS
+USER_SCRIPT=("kernel ${BOOT_DEVICE}"
+			 "app ${BOOT_DEVICE} -x dummyfs xip1 ocram2"
+			 "app ${BOOT_DEVICE} -x imxrt-multi ocram2 ocram2"
+			 "app ${BOOT_DEVICE} -x psh xip1 ocram2"
+			 "app ${BOOT_DEVICE} -x imxrt-flash ocram2 ocram2")
 
 
-b_mkscript() {
+b_mkscript_user() {
 	ksz=$((($(wc -c < "${PREFIX_PROG_STRIPPED}phoenix-${TARGET_FAMILY}-${TARGET_SUBFAMILY}.elf") + SIZE_PAGE - 1) & PAGE_MASK))
 	poffs=$((KERNEL_OFFS + ksz))
 
-	for prog in "${PROGS[@]}"; do
-		psz=$((($(wc -c < "${PREFIX_PROG_STRIPPED}$prog") + SIZE_PAGE - 1) & PAGE_MASK))
-		printf "@%s(%x:%x)\n" "$prog" "$poffs" "$psz" >> "$PREFIX_BUILD/plo/script.plo"
-		((poffs+=psz))
+	printf "%s" "$MAGIC_USER_SCRIPT" >> "$PREFIX_BUILD/plo/$NAME_USER_SCRIPT"
+	for cmd in "${USER_SCRIPT[@]}"; do
+		args=($cmd)
+		case "${args[0]}"
+		in
+			app)
+				if [ "${args[2]}" = "-x" ] ; then
+					name=$(cut -d ';' -f 1 <<< "${args[3]}")
+				else
+					name=$(cut -d ';' -f 1 <<< "${args[2]}")
+				fi
+
+				PROGS+=("$name")
+				psz=$((($(wc -c < "${PREFIX_PROG_STRIPPED}$name") + SIZE_PAGE - 1) & PAGE_MASK))
+				printf "alias %s 0x%x 0x%x\n" "$name" "$poffs" "$psz" >> "$PREFIX_BUILD/plo/$NAME_USER_SCRIPT"
+				((poffs+=psz));;
+
+			kernel)
+				printf "alias %s 0x%x 0x%x\n" "phoenix-${TARGET_FAMILY}-${TARGET_SUBFAMILY}.elf" "$KERNEL_OFFS" "$ksz" >> "$PREFIX_BUILD/plo/$NAME_USER_SCRIPT";;
+		esac;
+		printf "%s\n" "$cmd" >> "$PREFIX_BUILD/plo/$NAME_USER_SCRIPT"
 	done
 
-	cat _targets/armv7m7-imxrt106x.plo >> "$PREFIX_BUILD/plo/script.plo"
-	printf "\0" >> "$PREFIX_BUILD/plo/script.plo"
+	printf "\0" >> "$PREFIX_BUILD/plo/$NAME_USER_SCRIPT"
 }
 
+
+b_mkscript_preinit() {
+	cat _targets/armv7m7-imxrt106x.plo >> "$PREFIX_BUILD/plo/script.plo"
+	sz=$(wc -c < "$PREFIX_BUILD/plo/$NAME_USER_SCRIPT")
+
+	{
+		printf "alias %s 0x%x 0x%x\n" "$NAME_USER_SCRIPT" "$OFFS_USER_SCRIPT" "$sz"
+		printf "call %s %s %s\n" "$BOOT_DEVICE" "$NAME_USER_SCRIPT" "$MAGIC_USER_SCRIPT"
+		printf "\0"
+	} >> "$PREFIX_BUILD/plo/script.plo"
+}
 
 
 b_build_target() {
 
 	b_log "Building sample project for $TARGET"
 
+	# TODO: move to psh install target
+	ln -f "$PREFIX_ROOTFS/bin/"{psh,mount}
+	ln -f "$PREFIX_ROOTFS/bin/"{psh,bind}
+	ln -f "$PREFIX_ROOTFS/bin/"{psh,ps}
+	ln -f "$PREFIX_ROOTFS/bin/"{psh,mem}
+	ln -f "$PREFIX_ROOTFS/bin/"{psh,perf}
+	ln -f "$PREFIX_ROOTFS/bin/"{psh,sync}
+	ln -f "$PREFIX_ROOTFS/bin/"{psh,reboot}
+	ln -f "$PREFIX_ROOTFS/bin/"{psh,top}
+
+
 	# FIXME: build plo out of tree and without clean
 	b_log "Building plo"
-	make -C plo clean all
+	(cd plo; make $MAKEFLAGS clean all)
 
-	b_mkscript
+	b_mkscript_user
+	b_mkscript_preinit
 
-	b_log "Relink plo to include the new script"
-	make -C plo all
+	b_log "Relink plo to include the preinit script"
+	(cd plo && make $MAKEFLAGS all)
 
 	cp "${PREFIX_PROG_STRIPPED}plo-ram-${TARGET_FAMILY}-${TARGET_SUBFAMILY}.img" _boot/
 	cp "phoenix-rtos-hostutils/psu/plo-ram-${TARGET_FAMILY}-${TARGET_SUBFAMILY}.sdp" _boot/
@@ -95,6 +151,10 @@ b_image_target() {
 	OFFSET=0
 	b_add2img "${PREFIX_PROG_STRIPPED}plo-${TARGET_FAMILY}-${TARGET_SUBFAMILY}.img" "$IMG"
 
+	# User script
+	OFFSET="$OFFS_USER_SCRIPT"
+	b_add2img "$PREFIX_BUILD/plo/$NAME_USER_SCRIPT" "$IMG"
+
 	# Kernel
 	OFFSET="$KERNEL_OFFS"
 	b_add2img "${PREFIX_PROG_STRIPPED}phoenix-${TARGET_FAMILY}-${TARGET_SUBFAMILY}.elf" "$IMG"
@@ -105,8 +165,5 @@ b_image_target() {
 	done
 }
 
-b_test_target() {
-	:
-}
 
 export -f b_build_target
