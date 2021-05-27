@@ -3,16 +3,10 @@ name: ci
 
 # on events
 on:
+  workflow_dispatch:
   push:
     branches:
-      - master
-      - posix_rev
-      - 'feature/*'
-  pull_request:
-    branches:
-      - master
-      - posix_rev
-      - 'feature/*'
+      - xyz
 
 # jobs
 jobs:
@@ -21,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: ['armv7a7-imx6ull', 'armv7a9-zynq7000', 'armv7m7-imxrt106x', 'armv7m4-stm32l4x6', 'host-pc', 'ia32-generic', 'riscv64-spike', 'riscv64-virt']
+        target: ['ia32-generic', 'host-pc', 'armv7m7-imxrt106x']
         include:
           - target: 'ia32-generic'
             syspage: 'psh pc-ata uart16550'
@@ -83,3 +77,28 @@ jobs:
         uses: ./.github/actions/phoenix-runner
         with:
           target: ${{ matrix.target }}
+
+  test-hw:
+    needs: build
+    name: Run tests on hardware
+    runs-on: [self-hosted]
+    strategy:
+      matrix:
+        target: ['armv7m7-imxrt106x']
+
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: phoenix-rtos-${{ matrix.target }}
+          path: _boot
+
+      - name: Test runner
+        run: |
+          python3 ./phoenix-rtos-tests/runner.py -T${{ matrix.target }}
+
