@@ -168,7 +168,11 @@ b_image_target() {
 }
 
 b_test_target() {
-	:
+	b_log "Installing tests in the phoenix-rtos filesystem"
+	make -C "phoenix-rtos-tests" all install
+
+	b_log "Copying binaries into $PREFIX_BOOT/test"
+	cp -av "$PREFIX_ROOTFS/bin/." "$PREFIX_BOOT/test"
 }
 
 export -f b_build_target
