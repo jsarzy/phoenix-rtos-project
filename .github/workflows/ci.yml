@@ -80,7 +80,7 @@ jobs:
 
   test-hw:
     needs: build
-    name: Run tests on hardware
+    name: run tests on hardware
     runs-on: [self-hosted]
     strategy:
       matrix:

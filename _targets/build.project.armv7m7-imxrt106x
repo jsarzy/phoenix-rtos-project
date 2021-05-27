@@ -171,8 +171,9 @@ b_test_target() {
 	b_log "Installing tests in the phoenix-rtos filesystem"
 	make -C "phoenix-rtos-tests" all install
 
-	b_log "Copying binaries into $PREFIX_BOOT/test"
-	cp -av "$PREFIX_ROOTFS/bin/." "$PREFIX_BOOT/test"
+	b_log "Copying binaries into $PREFIX_BOOT/test/$TARGET_FAMILY-$TARGET_SUBFAMILY"
+	mkdir -p "$PREFIX_BOOT/test" && mkdir -p "$PREFIX_BOOT/test/$TARGET_FAMILY-$TARGET_SUBFAMILY"
+	cp -av "$PREFIX_ROOTFS/bin/." "$PREFIX_BOOT/test/$TARGET_FAMILY-$TARGET_SUBFAMILY"
 }
 
 export -f b_build_target
