@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: ['armv7m7-imxrt106x', 'host-pc', 'ia32-generic']
+        target: ['armv7a7-imx6ull', 'armv7a9-zynq7000', 'armv7m7-imxrt106x', 'armv7m7-imxrt117x', 'armv7m4-stm32l4x6', 'host-pc', 'ia32-generic', 'riscv64-spike', 'riscv64-virt']
         include:
           - target: 'ia32-generic'
             syspage: 'psh pc-ata uart16550'
@@ -40,17 +40,19 @@ jobs:
           param4: 'project'
           param5: 'image'
 
-      # step 3: tar rootfs and move it into _boot
+      # step 3: tar rootfs
       - name: Tar rootfs
         working-directory: _fs
-        run: tar -cvf ../_boot/rootfs-${{ matrix.target }}.tar ${{ matrix.target }}/root
+        run: tar -cvf ../rootfs-${{ matrix.target }}.tar ${{ matrix.target }}/root
 
-      # step 4: upload contents of "_boot" as build artifacts
+      # step 4: upload "_boot" directory and tarball of rootfs as build artifacts
       - name: Upload build artifacts
         uses: actions/upload-artifact@v2
         with:
           name: phoenix-rtos-${{ matrix.target }}
-          path: _boot
+          path: |
+            _boot
+            rootfs-${{ matrix.target }}.tar
 
   test:
     needs: build
@@ -70,11 +72,10 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: phoenix-rtos-${{ matrix.target }}
-          path: _boot
 
       - name: Untar rootfs
         working-directory: _fs
-        run: tar -xvf ../_boot/rootfs-${{ matrix.target }}.tar
+        run: tar -xvf ../rootfs-${{ matrix.target }}.tar
 
       - name: Test runner
         uses: ./.github/actions/phoenix-runner
